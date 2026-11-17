@@ -1,0 +1,16 @@
+{
+  "name": "Clever Cub",
+  "short_name": "Clever Cub",
+  "description": "Counting, letters, words and puzzles for little learners.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#d9f3ff",
+  "theme_color": "#a5e3ff",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
