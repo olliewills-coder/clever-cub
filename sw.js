@@ -22,9 +22,14 @@ self.addEventListener('install', event => {
       const res = await fetch('./voice/manifest.json', {cache: 'no-cache'});
       if (res.ok) {
         await cache.put('./voice/manifest.json', res.clone());
-        const files = [...new Set(Object.values((await res.json()).clips || {}))];
-        for (let i = 0; i < files.length; i += 40)
-          await Promise.all(files.slice(i, i + 40).map(f => cache.add('./voice/' + f).catch(() => {})));
+        let files = [...new Set(Object.values((await res.json()).clips || {}))];
+        // up to three passes, so a brief network blip does not leave gaps in the offline voice
+        for (let pass = 0; pass < 3 && files.length; pass++) {
+          const failed = [];
+          for (let i = 0; i < files.length; i += 40)
+            await Promise.all(files.slice(i, i + 40).map(f => cache.add('./voice/' + f).catch(() => failed.push(f))));
+          files = failed;
+        }
       }
     } catch (e) {}
     await self.skipWaiting();
