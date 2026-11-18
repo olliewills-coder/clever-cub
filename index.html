@@ -81,6 +81,16 @@ body.nospeech .speak, body.nospeech .bigspeak{display:none}
 .tile .bar{width:64%; height:12px; background:rgba(255,255,255,.35); border-radius:10px; overflow:hidden}
 .tile .bar i{display:block; height:100%; background:#fff; border-radius:10px}
 .homefoot{display:flex; align-items:center; gap:14px; margin-top:18px; flex:none}
+.resume{flex:none; display:flex; align-items:center; gap:clamp(12px,2vmin,20px); width:100%; margin:0 0 clamp(12px,2vmin,18px); padding:clamp(8px,1.4vmin,14px) clamp(14px,2.4vmin,24px);
+  background:#fff; border-radius:24px; border:4px solid var(--c); box-shadow:0 5px 0 rgba(0,0,0,.1); text-align:left; color:var(--ink)}
+.resume:active{transform:translateY(3px); box-shadow:0 2px 0 rgba(0,0,0,.1)}
+.resume .ic{font-size:clamp(36px,6vmin,58px); line-height:1}
+.resume .rtxt{flex:1; display:flex; flex-direction:column; min-width:0}
+.resume small{font-size:clamp(15px,2.2vmin,20px); color:var(--muted); font-weight:700}
+.resume b{font-size:clamp(22px,3.4vmin,32px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.resume .go{flex:none; background:var(--c); color:#fff; font-weight:700; font-size:clamp(20px,3.2vmin,30px); padding:clamp(8px,1.4vmin,14px) clamp(16px,2.6vmin,26px); border-radius:18px; box-shadow:0 4px 0 rgba(0,0,0,.18)}
+@media (orientation:landscape){ .resume{padding-block:5px; margin-bottom:12px; border-width:3px} .resume .ic{font-size:clamp(28px,4.6vmin,42px)}
+  .resume .rtxt{flex-direction:row; align-items:baseline; gap:12px} .resume .go{padding-block:6px} }
 .stickerbtn{flex:1; display:flex; align-items:center; justify-content:center; gap:14px; font-size:clamp(26px,4vmin,38px); font-weight:700;
   padding:16px; background:linear-gradient(135deg,#fde68a,#fbbf24); min-height:76px}
 .stickerbtn .small{font-size:.7em; background:rgba(255,255,255,.7); border-radius:999px; padding:2px 12px}
@@ -232,6 +242,7 @@ body.nospeech .speak, body.nospeech .bigspeak{display:none}
 .tog input:checked + .sw:after{transform:translateX(26px)}
 .smallbtn{font-size:19px; font-weight:700; padding:10px 18px; border-radius:16px; background:#e0f2fe; margin:8px 8px 0 0}
 .smallbtn.danger{background:#fee2e2; color:#b91c1c}
+.parents input.syncin{display:block; width:100%; box-sizing:border-box; font-size:17px; margin:6px 0 2px}
 .prog{width:100%; border-collapse:collapse; font-size:18px}
 .prog th, .prog td{text-align:left; padding:8px 6px; border-bottom:1px solid #eef2f7}
 .prog th{color:var(--muted); font-size:15px}
@@ -424,7 +435,7 @@ const MEMORY_TEXT = {pics:['Find the matching pairs!','Tap two cards. Find the p
 
 // ---------- saved state ----------
 const STORE_KEY = 'clevercub.v1', LOG_KEY = 'clevercub.log.v1';
-const freshState = () => ({coins:0, earned:0, games:{}, stickers:[], stats:{}, adapt:{},
+const freshState = () => ({coins:0, earned:0, games:{}, stickers:[], stats:{}, adapt:{}, last:null,
   settings:{name:'', autoRead:false, voice:true, sfx:true, rate:0.9, voiceURI:'', unlockAll:false, adaptive:true, lively:true, pack:true}});
 function load(){
   const d = freshState(); let s = null;
@@ -450,7 +461,7 @@ function saveLog(){
 let hiddenTotal = 0, hiddenAt = null;
 const activeMs = () => performance.now() - hiddenTotal - (hiddenAt !== null ? performance.now() - hiddenAt : 0);
 let SESSION = null, sessionMark = 0;
-function sessionStart(){ SESSION = {t:new Date().toISOString(), ms:0, lv:0, q:0}; sessionMark = activeMs(); LOG.sessions.push(SESSION); saveLog(); }
+function sessionStart(){ SESSION = {t:new Date().toISOString(), ms:0, lv:0, q:0}; sessionMark = activeMs(); LOG.sessions.push(SESSION); saveLog(); Sync.flush(); }
 function sessionTick(){ if (!SESSION) return; const now = activeMs(); SESSION.ms = Math.round(SESSION.ms + now - sessionMark); sessionMark = now; }
 
 // ---------- automatic difficulty ----------
@@ -950,7 +961,8 @@ function onStart(){
   if (inp && inp.value.trim()){ S.settings.name = inp.value.trim().slice(0,20); save(); }
   Sound.unlock(); Sound.play('pop');
   const n = named();
-  if (S.settings.voice) Voice.say(n ? [`Hi ${n}! Let's play!`] : [PHRASES.greet], {kind:'cheer', force:true}); else Voice.unlock();
+  const rs = resumeTarget();
+  if (S.settings.voice) Voice.say([n ? `Hi ${n}! Let's play!` : PHRASES.greet, ...(rs ? [resumeLine(rs.g)] : [])], {kind:'cheer', force:true}); else Voice.unlock();
   Voice.unlocked = true;
   sessionStart();
   showHome();
@@ -961,12 +973,32 @@ function showHome(){
   const n = S.settings.name.trim(), r = rankOf(totalStars());
   app.innerHTML = `<div class="topbar"><div class="logo">🦁 Clever Cub</div><div class="spacer"></div><div class="pill">⭐ ${totalStars()}</div>${coinPill()}</div>
     <div class="greet"><button class="btn speak" data-act="speak" aria-label="Read it to me">🔊</button><div>${n ? `Hi ${esc(n)}!` : 'Hi!'} What shall we play?</div><div class="spacer"></div><div class="pill rank">${r.icon} ${r.name}</div></div>
+    ${resumeHTML()}
     <div class="grid">${GAMES.map(tileHTML).join('')}</div>
     <div class="homefoot"><button class="btn stickerbtn" data-act="stickers">🎁 My Stickers <span class="small">${S.stickers.length} / ${ALL_STICKERS.length}</span></button>
       <button class="btn iconbtn gear" id="gear" aria-label="Grown-ups: hold for 2 seconds">⚙️<i class="ring"></i></button></div>`;
   const nm = named();
-  setSay([nm ? `Hi ${nm}!` : 'Hi!', PHRASES.home1, PHRASES.home2, `You are a ${r.name}.`]);
+  const rs = resumeTarget();
+  setSay([nm ? `Hi ${nm}!` : 'Hi!', ...(rs ? [resumeLine(rs.g)] : []), PHRASES.home1, PHRASES.home2, `You are a ${r.name}.`]);
   bindGear();
+}
+// where she left off: the level she left part-way, or the next one after a finished level
+function resumeTarget(){
+  const l = S.last, g = l && GAME[l.game];
+  if (!g || !(l.level >= 1 && l.level <= g.levels.length)) return null;
+  const n = l.finished ? l.level + 1 : l.level;
+  return {g, last:l.level, finished:!!l.finished, n:n <= g.levels.length ? n : null};
+}
+const resumeLine = g => `Last time you played ${g.name}. Let's keep going!`;
+function resumeHTML(){
+  const rs = resumeTarget(); if (!rs) return '';
+  return `<button class="btn resume" data-act="resume" style="--c:${rs.g.color}"><span class="ic">${rs.g.icon}</span>
+    <span class="rtxt"><small>Last time</small><b>${rs.g.name} · Level ${rs.last}</b></span><span class="go">${rs.n ? 'Keep going ▶' : 'Play again ▶'}</span></button>`;
+}
+function resumeLast(){
+  const rs = resumeTarget(); if (!rs) return showHome();
+  if (rs.n && (rs.n <= gs(rs.g.id).unlocked || S.settings.unlockAll)) return startLevel(rs.g.id, rs.n);
+  return showLevels(rs.g.id);
 }
 function tileHTML(g){
   const st = gs(g.id), lv = Math.min(st.unlocked, g.levels.length), pct = Math.round(gameStars(g.id) / (g.levels.length*3) * 100);
@@ -1002,6 +1034,7 @@ function startLevel(gid, n){
   const g = GAME[gid]; if (!g || n < 1 || n > g.levels.length) return showLevels(gid);
   leaveLevel(); closeOverlay(); curGame = gid; screen = 'play';
   const L = g.levels[n-1], b = ad(gid).b;
+  S.last = {game:gid, level:n, at:new Date().toISOString(), finished:false}; save();
   P = {gameId:gid, lvl:n, b, idx:0, mistakes:0, coins:0, locked:false, qMiss:false, tapN:0, pos:0, first:null, found:0, moves:0, qs:[], memory:null,
        lStart:activeMs(), lT:new Date().toISOString(), lq:[], done:false, touched:false};
   if (g.kind === 'memory') P.memory = makeMemory(L, b); else P.qs = buildQuestions(g, L, b);
@@ -1139,9 +1172,10 @@ function logLevel(p, done, stars, change){
   const ms = Math.round(activeMs() - p.lStart);
   const rec = {t:p.lT, g:p.gameId, l:p.lvl, b:p.b, ms, n:p.memory ? p.memory.pairs : p.lq.length, w:p.mistakes, st:stars || 0, c:p.coins, done, ch:change || '',
     avg:p.lq.length ? Math.round(p.lq.reduce((a,x) => a + x.ms, 0) / p.lq.length) : 0};
-  if (p.memory) rec.mv = p.moves;
+  if (p.memory) rec.mv = p.moves; else rec.ok = p.lq.filter(x => x.ok).length;
+  rec.unl = gs(p.gameId).unlocked;
   LOG.levels.push(rec); if (SESSION && done) SESSION.lv++;
-  saveLog();
+  saveLog(); Sync.level(rec);
 }
 // leaving part-way through still records the time spent
 function leaveLevel(){ if (P && !P.done && P.touched){ P.done = true; logLevel(P, false, 0, ''); } }
@@ -1162,6 +1196,7 @@ function finishLevel(){
   if (!last) st.unlocked = Math.max(st.unlocked, p.lvl+1);
   if (g.kind === 'memory'){ const a = ad(p.gameId), dur = activeMs() - p.lStart; a.recent.push({ok:p.mistakes <= p.memory.pairs, fast:dur <= p.memory.pairs*7000}); if (a.recent.length > ADAPT.keep) a.recent.shift(); }
   const change = adaptAfterLevel(p);
+  S.last = {game:p.gameId, level:p.lvl, at:new Date().toISOString(), finished:true};
   const bonus = 5 + (stars === 3 ? 3 : 0);
   S.coins += bonus; S.earned += bonus; p.coins += bonus; save();
   logLevel(p, true, stars, change);
@@ -1323,12 +1358,17 @@ function showParents(){
       <p>Coins now: <b>${S.coins}</b> · Coins earned in total: <b>${S.earned}</b> · Stickers: <b>${S.stickers.length} of ${ALL_STICKERS.length}</b> · Rank: <b>${rankOf(totalStars()).name}</b> (${totalStars()} stars)</p>
       ${toggleRow('pUnlock','Open all levels',s.unlockAll,'Lets her skip ahead. Her stars and coins stay as they are.')}
       <button class="btn smallbtn" data-act="addcoins">${COIN} Give 10 coins</button><button class="btn smallbtn danger" data-act="reset">Reset all progress</button></section>
+    <section class="card2"><h3>Grown-ups' dashboard</h3>
+      <p class="note">Paste the Google script address once. It stays on this iPad. After each level the game sends levels, difficulty, stars, times and right-first-time counts to your Google Sheet. It never sends the name. Without internet, levels wait here and go later. Clear the box to stop.</p>
+      <input id="pSync" class="syncin" type="url" inputmode="url" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(Sync.cfg.url || '')}">
+      <p class="note" id="syncStatus">${esc(Sync.statusText())}</p>
+      <button class="btn smallbtn" data-act="syncnow">Send now</button><button class="btn smallbtn" data-act="synctest">Send a test</button></section>
     <section class="card2"><h3>Using it on the iPad</h3><ul>
       <li>Open the game in <b>Safari</b>, tap <b>Share</b>, then <b>Add to Home Screen</b>. It then opens full screen like an app.</li>
       <li>After the first open it works without internet.</li>
       <li>To keep her inside the game: Settings → Accessibility → <b>Guided Access</b>, then triple-click the top (or Home) button while the game is open.</li>
       <li>No sound? Check the iPad is not on silent and the volume is up.</li>
-      <li>Progress, coins, stickers and the log are saved on this iPad only.</li></ul></section>
+      <li>Progress, coins, stickers and the log are saved on this iPad. If a Google address is added above, game numbers are also sent to that Google Sheet.</li></ul></section>
   </div>`;
   setSay([]);
   const on = (id, ev, fn) => { const el = $('#' + id); if (el) el.addEventListener(ev, fn); };
@@ -1342,9 +1382,108 @@ function showParents(){
   on('pUnlock', 'change', e => { S.settings.unlockAll = e.target.checked; save(); });
   on('pRate', 'change', e => { S.settings.rate = +e.target.value; save(); });
   on('pVoiceSel', 'change', e => { S.settings.voiceURI = e.target.value; Voice.choose(); save(); testVoice(); });
+  on('pSync', 'change', e => Sync.setUrl(e.target.value));
 }
 function testVoice(){ Sound.unlock(); Voice.say(['How many apples?', pick(PRAISE)], {kind:'cheer', force:true}); }
-function changeChallenge(id, d){ const a = ad(id); a.b = Math.max(ADAPT.min, Math.min(ADAPT.max, a.b + d)); a.recent = []; save(); showParents(); }
+function changeChallenge(id, d){ const a = ad(id), from = a.b; a.b = Math.max(ADAPT.min, Math.min(ADAPT.max, a.b + d)); a.recent = []; save(); Sync.adj(id, from, a.b); showParents(); }
+
+// ---------- sending progress to the grown-ups' dashboard ----------
+// Off until a grown-up pastes a Google script address in grown-ups; the address stays on this iPad.
+// Sends game numbers only (levels, difficulty, stars, times, right-first-time counts), never the name or anything typed.
+const SYNC_KEY = 'clevercub.sync.v1', OUTBOX_KEY = 'clevercub.outbox.v1', OUTBOX_CAP = 3000;
+const SYNC_URL_RE = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/;
+function hashId(s){   // short, stable id: a row sent twice is stored once
+  let h1 = 0x811c9dc5, h2 = 0x2545f491;
+  for (let i = 0; i < s.length; i++){ const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619); h2 = Math.imul(h2 ^ c, 2246822519) ^ (h2 >>> 13); }
+  return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36);
+}
+const Sync = {
+  cfg:{}, box:[], busy:false, retry:null,
+  load(){
+    if (QUIET) return;
+    try { this.cfg = JSON.parse(localStorage.getItem(SYNC_KEY)) || {}; } catch(e) { this.cfg = {}; }
+    try { const b = JSON.parse(localStorage.getItem(OUTBOX_KEY)); this.box = Array.isArray(b) ? b : []; } catch(e) { this.box = []; }
+    if (!this.cfg.dev){ this.cfg.dev = hashId(String(Math.random()) + Date.now()); this.saveCfg(); }
+  },
+  saveCfg(){ if (!QUIET) try { localStorage.setItem(SYNC_KEY, JSON.stringify(this.cfg)); } catch(e) {} },
+  saveBox(){ if (this.box.length > OUTBOX_CAP) this.box.splice(0, this.box.length - OUTBOX_CAP); if (!QUIET) try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(this.box)); } catch(e) {} },
+  on(){ return !!this.cfg.url; },
+  levelRow(rec){
+    return {id:hashId(`${this.cfg.dev}|${rec.t}|${rec.g}|${rec.l}|${rec.done}`), k:'level', t:rec.t, day:dayKey(rec.t), g:rec.g, l:rec.l, b:rec.b,
+      st:rec.st, n:rec.n, ok:rec.ok ?? null, w:rec.w, ms:rec.ms, done:rec.done, ch:rec.ch || '', unl:rec.unl ?? null};
+  },
+  level(rec){ if (!this.on()) return; this.box.push(this.levelRow(rec)); this.saveBox(); this.flush(); },
+  adj(g, from, to){
+    if (!this.on() || from === to) return;
+    const t = new Date().toISOString();
+    this.box.push({id:hashId(`${this.cfg.dev}|adj|${t}|${g}`), k:'adj', t, day:dayKey(t), g, from, to}); this.saveBox(); this.flush();
+  },
+  // where she is now: level and difficulty in each game, and minutes and answers per day from this iPad's own log
+  snap(){
+    sessionTick();
+    const want = new Set(), days = {}, qdays = {};
+    for (let i = 0; i < 14; i++){ const d = new Date(); d.setDate(d.getDate() - i); want.add(dayKey(d)); }
+    LOG.sessions.forEach(x => { const k = dayKey(x.t); if (want.has(k)) days[k] = (days[k] || 0) + x.ms; });
+    LOG.q.forEach(x => { const k = dayKey(x.t); if (want.has(k)){ const a = qdays[k] || (qdays[k] = [0, 0]); a[0]++; if (x.ok) a[1]++; } });
+    const games = {};
+    GAMES.forEach(g => { games[g.id] = {lv:Math.min(gs(g.id).unlocked, g.levels.length), of:g.levels.length, b:ad(g.id).b, stars:gameStars(g.id)}; });
+    const lastQ = LOG.q[LOG.q.length - 1], lastL = LOG.levels[LOG.levels.length - 1];
+    const lastPlayed = [lastQ && lastQ.t, lastL && lastL.t].filter(Boolean).sort().pop() || null;
+    const last = S.last && GAME[S.last.game] ? {game:S.last.game, level:S.last.level, at:S.last.at, finished:!!S.last.finished} : null;
+    return {at:new Date().toISOString(), games, days, qdays, coins:S.coins, stars:totalStars(), lastPlayed, last};
+  },
+  async flush(){
+    if (QUIET || !this.on() || this.busy) return;
+    this.busy = true; clearTimeout(this.retry);
+    const rows = this.box.slice(0, 150);
+    const body = JSON.stringify({app:'clevercub', v:1, dev:this.cfg.dev, sentAt:new Date().toISOString(), rows, snap:this.snap()});
+    try {
+      const res = await fetch(this.cfg.url, {method:'POST', body, keepalive:body.length < 60000, cache:'no-store'});
+      const j = await res.json();
+      if (!j || !j.ok) throw new Error((j && j.error) || `HTTP ${res.status}`);
+      const sent = new Set(rows.map(r => r.id));
+      this.box = this.box.filter(r => !sent.has(r.id)); this.saveBox();
+      this.cfg.lastOk = new Date().toISOString(); this.cfg.lastErr = ''; this.saveCfg();
+      this.busy = false; this.status();
+      if (this.box.length) this.flush();
+    } catch(e){
+      this.cfg.lastErr = String((e && e.message) || e).slice(0, 100); this.cfg.lastErrAt = new Date().toISOString(); this.saveCfg();
+      this.busy = false; this.status();
+      this.retry = setTimeout(() => this.flush(), 90000);   // offline or Google busy: try again later; rows wait on the iPad
+    }
+  },
+  async test(){
+    if (!this.on()) return toast('Add the Google address first');
+    const t = new Date().toISOString();
+    const body = JSON.stringify({app:'clevercub', v:1, dev:this.cfg.dev, test:true, sentAt:t, rows:[{id:hashId(`${this.cfg.dev}|test|${t}`), k:'test', t, day:dayKey(t)}]});
+    toast('Sending a test…');
+    try {
+      const res = await fetch(this.cfg.url, {method:'POST', body, cache:'no-store'});
+      const j = await res.json();
+      if (!j || !j.ok) throw new Error((j && j.error) || `HTTP ${res.status}`);
+      this.cfg.lastTest = t; this.saveCfg(); toast('Test received by Google ✓');
+    } catch(e){ toast(`Test did not arrive: ${String((e && e.message) || e).slice(0, 60)}`); }
+    this.status();
+  },
+  setUrl(v){
+    v = String(v || '').trim();
+    if (!v){ this.cfg.url = ''; this.box = []; this.saveBox(); this.saveCfg(); toast('Sending is off'); return this.status(); }
+    if (!SYNC_URL_RE.test(v)) return toast('That address does not look right. It starts https://script.google.com/macros/s/ and ends /exec');
+    if (this.cfg.url === v) return;
+    this.cfg.url = v; this.saveCfg();
+    const have = new Set(this.box.map(r => r.id));   // send the levels already on this iPad, so the dashboard starts with her history
+    LOG.levels.forEach(rec => { const r = this.levelRow(rec); if (!have.has(r.id)) this.box.push(r); });
+    this.saveBox(); toast('Saved. Sending now…'); this.flush();
+  },
+  statusText(){
+    if (!this.on()) return 'Off: nothing is sent.';
+    const c = this.cfg, parts = [c.lastOk ? `Last sent ${fmtWhen(c.lastOk)}` : 'Not sent yet', this.box.length ? `${this.box.length} waiting to send` : 'nothing waiting'];
+    if (c.lastErr && (!c.lastOk || c.lastErrAt > c.lastOk)) parts.push(`the last try did not get through (${c.lastErr}), so it will try again`);
+    if (c.lastTest) parts.push(`test received ${fmtWhen(c.lastTest)}`);
+    return parts.join(' · ');
+  },
+  status(){ const el = $('#syncStatus'); if (el) el.textContent = this.statusText(); }
+};
 
 // ---------- log export ----------
 function csvLog(){
@@ -1388,6 +1527,7 @@ document.addEventListener('click', e => {
     case 'again': Sound.play('tap'); Voice.stop(); return P && startLevel(P.gameId, P.lvl);
     case 'levels': Sound.play('tap'); Voice.stop(); return showLevels(P ? P.gameId : curGame);
     case 'stickers': Sound.play('tap'); return showStickers();
+    case 'resume': Sound.play('tap'); Voice.stop(); return resumeLast();
     case 'sticker': return onSticker(t);
     case 'buy': return buySticker(t.dataset.s);
     case 'closeov': closeOverlay(); if (screen === 'stickers') showStickers(); return;
@@ -1395,6 +1535,8 @@ document.addEventListener('click', e => {
     case 'chup': return changeChallenge(t.dataset.g, 1);
     case 'chdown': return changeChallenge(t.dataset.g, -1);
     case 'exportlog': return exportLog();
+    case 'syncnow': if (!Sync.on()) return toast('Add the Google address first'); toast('Sending…'); return Sync.flush();
+    case 'synctest': return Sync.test();
     case 'clearlog':
       if (confirm('Clear the play-time log? Levels, stars, coins and stickers stay.')){ LOG = freshLog(); SESSION = null; sessionStart(); toast('Log cleared'); showParents(); }
       return;
@@ -1408,10 +1550,11 @@ document.addEventListener('click', e => {
 });
 window.addEventListener('resize', () => { if (screen === 'play' && P && P.memory) sizeBoard(); });
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden){ sessionTick(); if (hiddenAt === null) hiddenAt = performance.now(); Voice.stop(); saveLog(); }
+  if (document.hidden){ sessionTick(); if (hiddenAt === null) hiddenAt = performance.now(); Voice.stop(); saveLog(); Sync.flush(); }
   else if (hiddenAt !== null){ hiddenTotal += performance.now() - hiddenAt; hiddenAt = null; }
 });
 window.addEventListener('pagehide', () => saveLog());
+window.addEventListener('online', () => Sync.flush());
 document.addEventListener('pointerdown', () => Sound.unlock(), {once:true});
 document.addEventListener('gesturestart', e => e.preventDefault());
 document.addEventListener('dblclick', e => e.preventDefault());
@@ -1425,6 +1568,7 @@ function collectPhrases(){
   UP.forEach(l => { add(sayL(l)); add(`${sayL(l)}!`); });
   add('Hi!'); add(RANKS.map(r => [`You are a ${r.name}.`, `You are now a ${r.name}!`]).flat());
   add(GAMES.map(g => `${g.name}. Pick a level!`)); for (let n=1; n<=11; n++) add(`Finish level ${n} first!`);
+  add(GAMES.map(resumeLine));
   for (let n=1; n<=3; n++) add(`You got ${sayN(n)} star${n > 1 ? 's' : ''}!`);
   for (let n=1; n<=29; n++) add(`You need ${sayN(n)} more coin${n > 1 ? 's' : ''}.`);
   STICKER_SETS.forEach(s => { add(`Do you want this sticker for ${s.price} coins?`); add(`You finished the ${s.name} set!`); s.items.forEach(([,nm]) => { add(`Yay! You got ${aOrAn(nm)}!`); add(`${cap(nm)}!`); }); });
@@ -1542,6 +1686,47 @@ function selfTest(){
     closeOverlay(); showHome(); screens++;
     if (rankOf(totalStars()).name === 'Little Cub') errs.push('rank did not rise after finishing every level');
   } catch(e){ errs.push('screens: ' + e.message + ' ' + (e.stack || '').split('\n')[1]); }
+  // dashboard sync: rows come from the log, ids are stable, the name never goes out, nothing is sent during a test
+  try {
+    const keepName = S.settings.name; S.settings.name = 'Zebedee';
+    Sync.cfg = {url:'https://script.google.com/macros/s/TESTTESTTESTTESTTESTTESTTEST/exec', dev:'test0001'}; Sync.box = [];
+    startLevel('count', 1);
+    for (let i=0; i<P.qs.length; i++){ P.idx = i; renderQuestion(); P.touched = true; logQuestion(P.qs[i]); }
+    finishLevel(); closeOverlay();
+    ad('count').b = 0; changeChallenge('count', 1); screens++;
+    const rows = Sync.box, r0 = rows[0] || {};
+    if (rows.length !== 2 || r0.k !== 'level' || rows[1].k !== 'adj') errs.push(`sync: queued ${JSON.stringify(rows.map(r => r.k))}`);
+    if (!(r0.n > 0) || r0.ok !== r0.n || r0.done !== true || !/^[a-z0-9]{6,}$/.test(r0.id) || !(r0.unl >= 2)) errs.push(`sync: level row ${JSON.stringify(r0)}`);
+    if (Sync.levelRow(LOG.levels[LOG.levels.length-1]).id !== r0.id) errs.push('sync: id not stable');
+    const sn = Sync.snap(), body = JSON.stringify({app:'clevercub', dev:Sync.cfg.dev, rows, snap:sn});
+    if (/zebedee/i.test(body)) errs.push('sync: the name is in what would be sent');
+    if (body.includes('\\')) errs.push('sync: backslash in what would be sent');
+    if (!sn.games.count || sn.games.count.of !== GAME.count.levels.length || sn.games.count.b !== 1 || !Object.keys(sn.qdays).length) errs.push(`sync: snapshot ${JSON.stringify(sn.games.count)}`);
+    Sync.flush(); if (Sync.busy) errs.push('sync: tried to send during the self-test');
+    showParents(); if (!$('#pSync') || !$('#syncStatus')) errs.push('sync: grown-ups card missing');
+    Sync.setUrl('not an address'); if (Sync.cfg.url !== 'https://script.google.com/macros/s/TESTTESTTESTTESTTESTTESTTEST/exec') errs.push('sync: accepted a bad address');
+    if (!sn.last || !sn.last.game) errs.push('sync: snapshot has no left-off level');
+    Sync.cfg = {}; Sync.box = []; S.settings.name = keepName; showHome();
+  } catch(e){ errs.push('sync: ' + e.message + ' ' + (e.stack || '').split('\n')[1]); }
+  // where she left off: a finished level resumes at the next one, an unfinished one resumes itself
+  try {
+    S.last = null; showHome(); if ($('.resume')) errs.push('resume: card shown with no record');
+    startLevel('letters', 2); for (let i=0; i<P.qs.length; i++){ P.idx = i; renderQuestion(); P.touched = true; logQuestion(P.qs[i]); } finishLevel(); closeOverlay();
+    if (!S.last || S.last.game !== 'letters' || S.last.level !== 2 || !S.last.finished) errs.push(`resume: after finishing ${JSON.stringify(S.last)}`);
+    showHome(); screens++; const card = $('.resume');
+    if (!card || !/Letters · Level 2/.test(card.textContent) || !/Keep going/.test(card.textContent)) errs.push(`resume: card "${card ? card.textContent.trim() : ''}"`);
+    if (!currentSay.includes(resumeLine(GAME.letters))) errs.push('resume: not in the spoken home lines');
+    resumeLast(); if (!P || P.gameId !== 'letters' || P.lvl !== 3) errs.push(`resume: opened ${P && P.gameId} ${P && P.lvl}, wanted letters 3`);
+    P.touched = true; showHome();
+    if (!S.last || S.last.level !== 3 || S.last.finished) errs.push(`resume: after leaving early ${JSON.stringify(S.last)}`);
+    resumeLast(); if (!P || P.lvl !== 3) errs.push('resume: did not reopen the unfinished level');
+    showHome();
+    const lastG = GAME.spell, top = lastG.levels.length; gs('spell').unlocked = top; S.last = {game:'spell', level:top, at:new Date().toISOString(), finished:true};
+    showHome(); if (!/Play again/.test(($('.resume') || {}).textContent || '')) errs.push('resume: last level should say Play again');
+    resumeLast(); if (screen !== 'levels') errs.push('resume: last level should open the levels screen');
+    if (!collectPhrases().includes(resumeLine(GAME.count))) errs.push('resume: line missing from the voice list');
+    S.last = null; showHome();
+  } catch(e){ errs.push('resume: ' + e.message + ' ' + (e.stack || '').split('\n')[1]); }
   const phrases = collectPhrases();
   const out = document.createElement('pre'); out.id = 'selftest';
   out.textContent = JSON.stringify({questionsChecked:n, screensDrawn:screens, phrases:phrases.length, loggedLevels:LOG.levels.length, loggedQuestions:LOG.q.length, errorCount:errs.length, errors:errs.slice(0,40)});
@@ -1550,6 +1735,7 @@ function selfTest(){
 }
 
 // ---------- start ----------
+Sync.load();
 Voice.init();
 if (TEST) selfTest();
 else if (PHRASE_DUMP){ const out = document.createElement('pre'); out.id = 'phrases'; out.textContent = JSON.stringify(collectPhrases()); document.body.appendChild(out); document.title = 'PHRASES'; }

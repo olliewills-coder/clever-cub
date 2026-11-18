@@ -1,5 +1,5 @@
 // Clever Cub offline cache. Bump VERSION whenever index.html changes so the iPad picks up the new copy.
-const VERSION = 'clevercub-c02104b551';
+const VERSION = 'clevercub-689ee5b26c';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png'];
 const FONT_CSS = 'https://fonts.googleapis.com/css2?family=Andika:wght@400;700&display=swap';
 
